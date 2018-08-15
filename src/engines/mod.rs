@@ -44,7 +44,7 @@ pub use self::xdvipdfmx::XdvipdfmxEngine;
 #[cfg(unix)]
 fn osstr_from_cstr(s: &CStr) -> Cow<OsStr> {
 	use std::os::unix::ffi::OsStrExt;
-	OsStr::from_bytes(s.to_bytes()).into()
+	Cow::Borrowed(OsStr::from_bytes(s.to_bytes()))
 }
 #[cfg(windows)]
 fn osstr_from_cstr(s: &CStr) -> Cow<OsStr> {
