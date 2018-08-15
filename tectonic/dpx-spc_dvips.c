@@ -48,6 +48,12 @@
 #include "dpx-specials.h"
 #include "internals.h"
 
+#ifdef _MSC_VER
+#define popen _popen
+#define pclose _pclose
+#endif
+
+
 static int    block_pending = 0;
 static double pending_x     = 0.0;
 static double pending_y     = 0.0;

@@ -5,6 +5,8 @@
 // TODO: this surely needs to become much smarter and more flexible.
 
 extern crate cc;
+#[cfg(target_env = "msvc")]
+extern crate vcpkg;
 extern crate pkg_config;
 extern crate regex;
 extern crate sha2;
@@ -36,21 +38,75 @@ fn cpp_platform_specifics(cfg: &mut cc::Build) {
     cfg.file("tectonic/XeTeXFontMgr_Mac.mm");
 }
 
+// Windows platform specifics:
+#[cfg(target_os = "windows")]
+const LIBS: &'static str = "fontconfig harfbuzz >= 1.4 harfbuzz-icu icu-uc freetype2 graphite2 libpng zlib";
+#[cfg(target_os = "windows")]
+#[allow(dead_code)]
+const VCPKG_LIBS: &[&[&'static str]] = &[
+    &["fontconfig"], &["harfbuzz"], &["icu"], &["freetype"], &["graphite2"], &["libpng"], &["zlib"]];
+//FIXME: it should actually be harfbuzz[icu], but currently vcpkg-rs doesn't support features.
 
-// Not-MacOS:
+#[cfg(target_os = "windows")]
+fn c_platform_specifics(cfg: &mut cc::Build) {
+    let target = env::var("TARGET").unwrap();
+    if target.contains("msvc") {
+        cfg
+            .file("tectonic/msvc/dirent.c")
+            .file("tectonic/msvc/getopt.c")
+            .file("tectonic/msvc/win32error.c")
+            .include("tectonic/msvc/");
+    }
+}
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn cpp_platform_specifics(cfg: &mut cc::Build) {
+    let target = env::var("TARGET").unwrap();
+    if target.contains("msvc") {
+        cfg
+            .include("tectonic/msvc/");
+    }
+    cfg.file("tectonic/XeTeXFontMgr_FC.cpp");
+}
+
+
+// Not-MacOS or Windows:
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 const LIBS: &'static str = "fontconfig harfbuzz >= 1.4 harfbuzz-icu icu-uc freetype2 graphite2 libpng zlib";
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn c_platform_specifics(_: &mut cc::Build) {
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn cpp_platform_specifics(cfg: &mut cc::Build) {
     cfg.file("tectonic/XeTeXFontMgr_FC.cpp");
 }
 
+#[cfg(target_env = "msvc")]
+fn load_vcpkg_deps() {
+    for dep in VCPKG_LIBS {
+        if dep.len() <= 1 {
+            vcpkg::find_package(dep[0]).expect("failed to load package from vcpkg");
+        } else {
+            let mut config = vcpkg::Config::new();
+            for lib in &dep[1..] {
+                config.lib_name(lib);
+            }
+            config.find_package(dep[0]).expect("failed to load package from vcpkg");
+        }
+    }
+}
+
+#[cfg(not(target_env = "msvc"))]
+fn load_vcpkg_deps() {
+    panic!()
+}
+
+fn load_pkg_config_deps() {
+    pkg_config::Config::new().cargo_metadata(true).probe(LIBS).unwrap();
+}
 
 fn main() {
     // We (have to) rerun the search again below to emit the metadata at the right time.
@@ -272,10 +328,20 @@ fn main() {
     // Now that we've emitted the info for our own libraries, we can emit the
     // info for their dependents.
 
-    pkg_config::Config::new().cargo_metadata(true).probe(LIBS).unwrap();
+    if cfg!(target_env = "msvc") {
+        load_vcpkg_deps();
+    } else {
+        load_pkg_config_deps();
+    }
 
     // Tell cargo to rerun build.rs only if files in the tectonic/ directory have changed.
     for file in PathBuf::from("tectonic").read_dir().unwrap() {
+        let file = file.unwrap();
+        println!("cargo:rerun-if-changed={}", file.path().display());
+    }
+
+    #[cfg(target_env = "msvc")]
+    for file in PathBuf::from("tectonic/msvc").read_dir().unwrap() {
         let file = file.unwrap();
         println!("cargo:rerun-if-changed={}", file.path().display());
     }

@@ -35,6 +35,9 @@
 #include "dpx-specials.h"
 #include "internals.h"
 
+#ifdef _MSC_VER
+#define strcasecmp _stricmp
+#endif
 
 #ifndef ISBLANK
 #define ISBLANK(c) ((c) == ' ' || (c) == '\t')

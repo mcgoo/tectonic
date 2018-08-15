@@ -314,10 +314,28 @@ dpx_create_temp_file (void)
         int  _fd = -1;
         _tmpd = dpx_get_tmpdir();
         tmp = NEW(strlen(_tmpd) + strlen(TEMPLATE) + 1, char);
+#ifdef _MSC_VER
+        _fd == -1;
+        for(int retry = 0; retry < 10; retry ++) {
+            strcpy(tmp, _tmpd);
+            strcat(tmp, TEMPLATE);
+            mktemp(tmp);
+            if (strlen(tmp) == 0) {
+                errno = EEXIST;
+                break;
+            }
+            _fd = open(tmp, O_RDWR | O_CREAT | O_EXCL, _S_IREAD | _S_IWRITE);
+            if (_fd != -1 || errno != EEXIST) {
+                break;
+            }
+        }
+        free(_tmpd);
+#else
         strcpy(tmp, _tmpd);
         free(_tmpd);
         strcat(tmp, TEMPLATE);
         _fd  = mkstemp(tmp);
+#endif
         if (_fd != -1) {
             close(_fd);
         } else {

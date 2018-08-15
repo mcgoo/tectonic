@@ -59,6 +59,10 @@ authorization from the copyright holders.
 
 #include "xetexd.h"
 
+#ifdef _MSC_VER
+#define strcasecmp _stricmp
+#endif
+
 
 /* OT-related constants we need */
 #define kGSUB HB_TAG('G','S','U','B')

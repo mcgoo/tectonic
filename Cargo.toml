@@ -37,6 +37,9 @@ pkg-config = "^0.3"
 regex = "^1.0"
 sha2 = "^0.7"
 
+[target.'cfg(target_env = "msvc")'.build-dependencies]
+vcpkg = "0.2"
+
 [dependencies]
 aho-corasick = "^0.6"
 app_dirs = "^1.1"
