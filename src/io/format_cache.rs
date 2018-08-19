@@ -8,7 +8,7 @@
 use tempfile;
 use std::ffi::{OsStr};
 use std::io::{BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use digest::{DigestData};
 use errors::{ErrorKind, Result};
@@ -58,6 +58,31 @@ impl FormatCache {
         p.push(format!("{}-{}-{}.fmt", self.bundle_digest.to_string(), stem, ::FORMAT_SERIAL));
         Ok(p)
     }
+
+    fn path_for_format_marker(path: &Path) -> PathBuf {
+        let mut marker_name = path.file_name().map(OsStr::to_os_string).unwrap_or_default();
+        marker_name.push(".ok");
+        path.with_file_name(marker_name)
+    }
+
+    fn try_wait_for_format_marker(path: &Path) -> Result<bool> {
+        use std::io;
+        use std::thread;
+        use std::time::Duration;
+
+        if path.exists() {
+            let marker = Self::path_for_format_marker(path);
+            for _ in 0..20 {
+                if marker.exists() {
+                    return Ok(true);
+                }
+                thread::sleep(Duration::from_millis(100));
+            };
+            return Err(io::Error::new(io::ErrorKind::TimedOut, "time out waiting for format file").into());
+        } else {
+            Ok(false)
+        }
+    }
 }
 
 
@@ -66,6 +91,12 @@ impl IoProvider for FormatCache {
         let path = match self.path_for_format(name) {
             Ok(p) => p,
             Err(e) => return OpenResult::Err(e.into()),
+        };
+
+        match Self::try_wait_for_format_marker(&path) {
+            Ok(true) => {},
+            Ok(false) => return OpenResult::NotAvailable,
+            Err(e) => return OpenResult::Err(e),
         };
 
         let f = match super::try_open_file(&path) {
@@ -79,7 +110,9 @@ impl IoProvider for FormatCache {
 
 
     fn write_format(&mut self, name: &str, data: &[u8], _status: &mut StatusBackend) -> Result<()> {
-        use std::io::ErrorKind;
+        use std::io::{ErrorKind};
+        use std::fs::{File};
+        use std::ffi::OsStr;
 
         let final_path = self.path_for_format(OsStr::new(name))?;
 
@@ -91,15 +124,26 @@ impl IoProvider for FormatCache {
         temp_dest.write_all(data)?;
         
         /* another instance might has written it, detect this case and return as succeeded */
-        temp_dest.persist_noclobber(&final_path)
-            .and(Ok(()))
-            .or_else(|e|
+        let mut done_marker_name = final_path.file_name().map(OsStr::to_os_string).unwrap_or_default();
+        done_marker_name.push(".ok");
+        let done_marker_path = final_path.with_file_name(done_marker_name);
+        match temp_dest.persist_noclobber(&final_path) {
+            Ok(f) => {
+                use std::mem;
+                mem::drop(f);
+                File::create(done_marker_path)?;
+                Ok(())
+            },
+            Err(e) => {
                 if e.error.kind() == ErrorKind::AlreadyExists {
-                    Ok(())
-                } else {
-                    Err(e.error)
+                    match Self::try_wait_for_format_marker(&final_path) {
+                        Ok(true) => return Ok(()),
+                        Ok(false) => {},
+                        Err(e) => return Err(e.into()),
+                    };
                 }
-            )?;        
-        Ok(())
+                Err(e.error.into())
+            }
+        }
     }
 }
