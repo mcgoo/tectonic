@@ -148,21 +148,25 @@ impl<B: Bundle> LocalCache<B> {
 
 
     fn record_cache_result(&mut self, name: &OsStr, length: u64, digest: Option<DigestData>) -> Result<()> {
+        use std::io::{Seek, SeekFrom};
+
         let digest_text = match digest {
             Some(ref d) => d.to_string(),
             None => "-".to_owned(),
         };
 
         let mut man = fs::OpenOptions::new()
-            .append(true)
+            .write(true)
             .create(true)
             .open(&self.manifest_path)?;
+        /* lock_exclusive() doesn't work in append mode on windows. let's just seek to the end. */
 
         // Lock will be released when file is closed at the end of this function.
         ctry!(man.lock_exclusive(); "failed to lock manifest file \"{}\" for writing", self.manifest_path.display());
 
         if let Some(name_utf8) = name.to_str() {
             if !name_utf8.contains(|c| c == '\n' || c == '\r') {
+                man.seek(SeekFrom::End(0))?;
                 writeln!(man, "{} {} {}", name_utf8, length, digest_text)?;
             }
         }
