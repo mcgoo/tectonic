@@ -79,17 +79,27 @@ impl IoProvider for FormatCache {
 
 
     fn write_format(&mut self, name: &str, data: &[u8], _status: &mut StatusBackend) -> Result<()> {
+        use std::io::ErrorKind;
+
         let final_path = self.path_for_format(OsStr::new(name))?;
 
-		let mut temp_dest = tempfile::Builder::new()
-			.prefix("format_")
-			.rand_bytes(6)
-			.tempfile_in(&self.formats_base)?;
+        let mut temp_dest = tempfile::Builder::new()
+            .prefix("format_")
+            .rand_bytes(6)
+            .tempfile_in(&self.formats_base)?;
 
-		temp_dest.write_all(data)?;
-		
-		temp_dest.persist(&final_path).map_err(|e| e.error)?;
-		
-		Ok(())
+        temp_dest.write_all(data)?;
+        
+        /* another instance might has written it, detect this case and return as succeeded */
+        temp_dest.persist_noclobber(&final_path)
+            .and(Ok(()))
+            .or_else(|e|
+                if e.error.kind() == ErrorKind::AlreadyExists {
+                    Ok(())
+                } else {
+                    Err(e.error)
+                }
+            )?;        
+        Ok(())
     }
 }
