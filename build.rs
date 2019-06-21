@@ -284,6 +284,11 @@ fn main() {
         cppcfg.define("WORDS_BIGENDIAN", "1");
     }
 
+    if cfg!(target_env = "msvc") {
+        ccfg.flag("/EHsc");
+        cppcfg.flag("/EHsc");
+    }
+
     // OK, back to generic build rules.
 
     ccfg.compile("libtectonic_c.a");
