@@ -6,7 +6,10 @@
 
 use cc;
 use pkg_config;
+#[cfg(target_env = "msvc")]
+use vcpkg;
 
+use std::env;
 use std::path::PathBuf;
 
 // No fontconfig on MacOS:
@@ -17,13 +20,51 @@ const LIBS: &'static str = "harfbuzz >= 1.4 harfbuzz-icu icu-uc freetype2 graphi
 const LIBS: &'static str =
     "fontconfig harfbuzz >= 1.4 harfbuzz-icu icu-uc freetype2 graphite2 libpng zlib";
 
+#[cfg(target_os = "windows")]
+#[allow(dead_code)]
+const VCPKG_LIBS: &[&[&'static str]] = &[
+    &["fontconfig"], &["harfbuzz"], &["icu"], &["freetype"], &["graphite2"], &["libpng"], &["zlib"]];
+//FIXME: it should actually be harfbuzz[icu], but currently vcpkg-rs doesn't support features.
+
+#[cfg(target_env = "msvc")]
+fn load_vcpkg_deps(include_paths: &mut Vec<PathBuf>) -> bool {
+    for dep in VCPKG_LIBS {
+        let library = if dep.len() <= 1 {
+            vcpkg::find_package(dep[0]).expect("failed to load package from vcpkg")
+        } else {
+            let mut config = vcpkg::Config::new();
+            for lib in &dep[1..] {
+                config.lib_name(lib);
+            }
+            config.find_package(dep[0]).expect("failed to load package from vcpkg")
+        };
+        include_paths.extend(library.include_paths.iter().cloned());
+    }
+    true
+}
+
+#[cfg(not(target_env = "msvc"))]
+fn load_vcpkg_deps(include_paths: &mut Vec<PathBuf>) -> bool {
+    false
+}
+
+
 fn main() {
     // We (have to) rerun the search again below to emit the metadata at the right time.
 
-    let deps = pkg_config::Config::new()
-        .cargo_metadata(false)
-        .probe(LIBS)
-        .unwrap();
+    let use_vcpkg = env::var("TECTONIC_VCPKG").is_ok();
+    let mut deps = None;
+    let mut vcpkg_includes = vec![];
+    if cfg!(target_env = "msvc") && use_vcpkg {
+        load_vcpkg_deps(&mut vcpkg_includes);
+        eprintln!("{:?}", vcpkg_includes);
+    } else {
+        let deps_library = pkg_config::Config::new()
+            .cargo_metadata(false)
+            .probe(LIBS)
+           .unwrap();
+        deps = Some(deps_library);
+    }
 
     // Actually I'm not 100% sure that I can't compile the C and C++ code
     // into one library, but who cares?
@@ -212,9 +253,16 @@ fn main() {
         .file("tectonic/xetex-XeTeXOTMath.cpp")
         .include(".");
 
-    for p in deps.include_paths {
-        ccfg.include(&p);
-        cppcfg.include(&p);
+    if let Some(deps) = &deps {
+        for p in &deps.include_paths {
+            ccfg.include(p);
+            cppcfg.include(p);
+        }
+    } else {
+        for p in &vcpkg_includes {
+            ccfg.include(p);
+            cppcfg.include(p);
+        }
     }
 
     // Platform-specific adjustments:
@@ -252,10 +300,12 @@ fn main() {
     // Now that we've emitted the info for our own libraries, we can emit the
     // info for their dependents.
 
-    pkg_config::Config::new()
-        .cargo_metadata(true)
-        .probe(LIBS)
-        .unwrap();
+    if let Some(_deps) = &deps {
+        pkg_config::Config::new()
+            .cargo_metadata(true)
+            .probe(LIBS)
+            .unwrap();
+    }
 
     // Tell cargo to rerun build.rs only if files in the tectonic/ directory have changed.
     for file in PathBuf::from("tectonic").read_dir().unwrap() {

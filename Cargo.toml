@@ -38,6 +38,9 @@ pkg-config = "^0.3"  # note: sync dist/docker/*/pkg-config-rs.sh with the versio
 regex = "^1.1"
 sha2 = "^0.8"
 
+[target.'cfg(target_env = "msvc")'.build-dependencies]
+vcpkg = "0.2"
+
 [dependencies]
 aho-corasick = "^0.7"
 app_dirs = "^1.1"
