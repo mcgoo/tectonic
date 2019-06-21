@@ -6,7 +6,6 @@
 
 use cc;
 use pkg_config;
-#[cfg(target_env = "msvc")]
 use vcpkg;
 
 use std::env;
@@ -16,53 +15,46 @@ use std::path::PathBuf;
 #[cfg(target_os = "macos")]
 const LIBS: &'static str = "harfbuzz >= 1.4 harfbuzz-icu icu-uc freetype2 graphite2 libpng zlib";
 
+#[cfg(target_os = "macos")]
+const VCPKG_LIBS: &[&'static str] = &["harfbuzz", "freetype", "graphite2"];
+
 #[cfg(not(target_os = "macos"))]
 const LIBS: &'static str =
     "fontconfig harfbuzz >= 1.4 harfbuzz-icu icu-uc freetype2 graphite2 libpng zlib";
 
-#[cfg(target_os = "windows")]
-#[allow(dead_code)]
-const VCPKG_LIBS: &[&[&'static str]] = &[
-    &["fontconfig"], &["harfbuzz"], &["icu"], &["freetype"], &["graphite2"], &["libpng"], &["zlib"]];
-//FIXME: it should actually be harfbuzz[icu], but currently vcpkg-rs doesn't support features.
+#[cfg(not(target_os = "macos"))]
+const VCPKG_LIBS: &[&'static str] = &["fontconfig", "harfbuzz", "freetype", "graphite2"];
+// Need a way to check that the vcpkg harfbuzz port has graphite2 and icu options enabled.
 
-#[cfg(target_env = "msvc")]
-fn load_vcpkg_deps(include_paths: &mut Vec<PathBuf>) -> bool {
+fn load_vcpkg_deps(include_paths: &mut Vec<PathBuf>) {
     for dep in VCPKG_LIBS {
-        let library = if dep.len() <= 1 {
-            vcpkg::find_package(dep[0]).expect("failed to load package from vcpkg")
-        } else {
-            let mut config = vcpkg::Config::new();
-            for lib in &dep[1..] {
-                config.lib_name(lib);
-            }
-            config.find_package(dep[0]).expect("failed to load package from vcpkg")
-        };
+        let library = vcpkg::find_package(dep).expect("failed to load package from vcpkg");
         include_paths.extend(library.include_paths.iter().cloned());
     }
-    true
 }
-
-#[cfg(not(target_env = "msvc"))]
-fn load_vcpkg_deps(include_paths: &mut Vec<PathBuf>) -> bool {
-    false
-}
-
 
 fn main() {
-    // We (have to) rerun the search again below to emit the metadata at the right time.
+    let target = env::var("TARGET").unwrap();
+    let rustflags = env::var("RUSTFLAGS").unwrap_or(String::new());
 
     let use_vcpkg = env::var("TECTONIC_VCPKG").is_ok();
     let mut deps = None;
     let mut vcpkg_includes = vec![];
-    if cfg!(target_env = "msvc") && use_vcpkg {
+    if use_vcpkg {
         load_vcpkg_deps(&mut vcpkg_includes);
         eprintln!("{:?}", vcpkg_includes);
+
+        if target.contains("-linux-") {
+            // add icudata to the end of the list of libs as vcpkg-rs does not
+            // order individual libraries as a single pass linker requires
+            println!("cargo:rustc-link-lib=icudata");
+        }
     } else {
+        // We (have to) rerun the search again below to emit the metadata at the right time.
         let deps_library = pkg_config::Config::new()
             .cargo_metadata(false)
             .probe(LIBS)
-           .unwrap();
+            .unwrap();
         deps = Some(deps_library);
     }
 
@@ -290,6 +282,15 @@ fn main() {
     if cfg!(target_endian = "big") {
         ccfg.define("WORDS_BIGENDIAN", "1");
         cppcfg.define("WORDS_BIGENDIAN", "1");
+    }
+
+    if target.contains("-msvc") {
+        ccfg.flag("/EHsc");
+        cppcfg.flag("/EHsc");
+        if rustflags.contains("+crt-static") {
+            ccfg.define("GRAPHITE2_STATIC", None);
+            cppcfg.define("GRAPHITE2_STATIC", None);
+        }
     }
 
     // OK, back to generic build rules.
