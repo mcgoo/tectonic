@@ -22,32 +22,24 @@ const LIBS: &'static str =
 
 #[cfg(target_os = "windows")]
 #[allow(dead_code)]
-const VCPKG_LIBS: &[&[&'static str]] = &[
-    &["fontconfig"], &["harfbuzz"], &["icu"], &["freetype"], &["graphite2"], &["libpng"], &["zlib"]];
-//FIXME: it should actually be harfbuzz[icu], but currently vcpkg-rs doesn't support features.
+const VCPKG_LIBS: &[&'static str] = &[
+    "fontconfig", "harfbuzz", "icu", "libpng", "zlib", "freetype", "graphite2"];
+//FIXME: it should actually be harfbuzz[graphite2,icu], but currently vcpkg-rs doesn't support features.
 
 #[cfg(target_env = "msvc")]
 fn load_vcpkg_deps(include_paths: &mut Vec<PathBuf>) -> bool {
     for dep in VCPKG_LIBS {
-        let library = if dep.len() <= 1 {
-            vcpkg::find_package(dep[0]).expect("failed to load package from vcpkg")
-        } else {
-            let mut config = vcpkg::Config::new();
-            for lib in &dep[1..] {
-                config.lib_name(lib);
-            }
-            config.find_package(dep[0]).expect("failed to load package from vcpkg")
-        };
+        let library = 
+            vcpkg::find_package(dep).expect("failed to load package from vcpkg");
         include_paths.extend(library.include_paths.iter().cloned());
     }
     true
 }
 
 #[cfg(not(target_env = "msvc"))]
-fn load_vcpkg_deps(include_paths: &mut Vec<PathBuf>) -> bool {
+fn load_vcpkg_deps(_include_paths: &mut Vec<PathBuf>) -> bool {
     false
 }
-
 
 fn main() {
     // We (have to) rerun the search again below to emit the metadata at the right time.
@@ -290,6 +282,11 @@ fn main() {
     if cfg!(target_endian = "big") {
         ccfg.define("WORDS_BIGENDIAN", "1");
         cppcfg.define("WORDS_BIGENDIAN", "1");
+    }
+
+    if cfg!(target_env = "msvc") {
+        ccfg.flag("/EHsc");
+        cppcfg.flag("/EHsc");
     }
 
     // OK, back to generic build rules.
