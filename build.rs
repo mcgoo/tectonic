@@ -6,7 +6,6 @@
 
 use cc;
 use pkg_config;
-
 use vcpkg;
 
 use std::env;
