@@ -12,9 +12,9 @@ environment:
 
 ### MSVC Targets ###
   # Stable 64-bit MSVC
-  - channel: stable
+  - target: x86_64-pc-windows-msvc
+    channel: stable
     toolchain: stable-x86_64-pc-windows-msvc
-    target: x86_64-pc-windows-msvc
     target_env: msvc
     # mingw_subdir: mingw64
     # mingw_target: x86_64-w64-mingw32
@@ -30,9 +30,9 @@ environment:
 
 ### GNU Targets ###
   # Stable 64-bit GNU
-    - channel: stable
+    - target: x86_64-pc-windows-gnu
+      channel: stable
       toolchain: stable-x86_64-pc-windows-msvc
-      target: x86_64-pc-windows-gnu
       target_env: gnu
       mingw_subdir: mingw64
       mingw_target: x86_64-w64-mingw32
