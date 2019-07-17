@@ -1,0 +1,4 @@
+*.log   eol=lf
+*.out   eol=lf
+*.fot   eol=lf
+*.tex   eol=lf
