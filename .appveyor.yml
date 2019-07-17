@@ -9,13 +9,12 @@ os: Visual Studio 2015
 ## Build Matrix ##
 environment:
   matrix:
-
 ### MSVC Targets ###
-  # Stable 64-bit MSVC
-  - target: x86_64-pc-windows-msvc
-    channel: stable
-    toolchain: stable-x86_64-pc-windows-msvc
-    target_env: msvc
+    # Stable 64-bit MSVC
+    - target: x86_64-pc-windows-msvc
+      channel: stable
+      toolchain: stable-x86_64-pc-windows-msvc
+      target_env: msvc
     # mingw_subdir: mingw64
     # mingw_target: x86_64-w64-mingw32
     # mingw_package_prefix: mingw-w64-x86_64
@@ -29,14 +28,14 @@ environment:
   #   mingw_package_prefix: mingw-w64-i686
 
 ### GNU Targets ###
-  # Stable 64-bit GNU
-    # - target: x86_64-pc-windows-gnu
-    #   channel: stable
-    #   toolchain: stable-x86_64-pc-windows-msvc
-    #   target_env: gnu
-    #   mingw_subdir: mingw64
-    #   mingw_target: x86_64-w64-mingw32
-    #   mingw_package_prefix: mingw-w64-x86_64
+    # Stable 64-bit GNU
+    - target: x86_64-pc-windows-gnu
+      channel: stable
+      toolchain: stable-x86_64-pc-windows-msvc
+      target_env: gnu
+      mingw_subdir: mingw64
+      mingw_target: x86_64-w64-mingw32
+      mingw_package_prefix: mingw-w64-x86_64
   # Stable 32-bit GNU
   # - channel: stable
   #   toolchain: stable-i686-pc-windows-msvc
